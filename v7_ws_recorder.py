@@ -13,7 +13,7 @@ from pathlib import Path
 
 import websockets
 from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.primitives.asymmetric import padding, rsa, ed25519
 
 WS = "wss://external-api-ws.kalshi.com/trade-api/ws/v2"
 OUT = Path(__file__).resolve().parent / "data" / "v7"
@@ -26,8 +26,13 @@ def headers():
     key=serialization.load_pem_private_key(Path(key_path).read_bytes(), password=None)
     ts=str(int(time.time()*1000))
     msg=(ts+"GET"+"/trade-api/ws/v2").encode()
-    signed=key.sign(msg,padding.PSS(mgf=padding.MGF1(hashes.SHA256()),
-                                    salt_length=padding.PSS.DIGEST_LENGTH),hashes.SHA256())
+    if isinstance(key, ed25519.Ed25519PrivateKey):
+        signed=key.sign(msg)
+    elif isinstance(key, rsa.RSAPrivateKey):
+        signed=key.sign(msg,padding.PSS(mgf=padding.MGF1(hashes.SHA256()),
+                                      salt_length=padding.PSS.DIGEST_LENGTH),hashes.SHA256())
+    else:
+        raise TypeError("Unsupported Kalshi private key type. Use Ed25519 or RSA PEM.")
     return {"KALSHI-ACCESS-KEY":key_id,"KALSHI-ACCESS-TIMESTAMP":ts,
             "KALSHI-ACCESS-SIGNATURE":base64.b64encode(signed).decode()}
 
