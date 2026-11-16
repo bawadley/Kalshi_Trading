@@ -59,9 +59,18 @@ class V72Tests(unittest.TestCase):
         records=[]
         for ts in (100,101,102,104,105,106):
             records.append({"ticker":"M","source_file":"a","second_ts":ts,
-                            "mid":ts/1000})
+                            "mid":ts/1000,"book_epoch":1})
         labeled=add_targets(records)
         self.assertEqual(len(labeled),6)
+        self.assertTrue(all(row["future_mid_change_5s"]!=
+                            row["future_mid_change_5s"] for row in labeled))
+
+    def test_snapshot_reset_breaks_target(self):
+        records=[]
+        for sec in range(100,108):
+            records.append({"ticker":"M","source_file":"a","second_ts":sec,
+                            "mid":sec/1000,"book_epoch":1 if sec<104 else 2})
+        labeled=add_targets(records)
         self.assertTrue(all(row["future_mid_change_5s"]!=
                             row["future_mid_change_5s"] for row in labeled))
 

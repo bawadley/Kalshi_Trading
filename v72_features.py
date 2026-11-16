@@ -25,7 +25,7 @@ FEATURES=["source_file","ticker","second_ts","local_end_ts_ms","quote_age_ms",
           "yes_bid_qty","yes_ask_qty","yes_depth5","no_depth5",
           "imbalance5","microprice","book_deltas","trade_count",
           "trade_volume","yes_taker_volume","no_taker_volume","unknown_taker_volume",
-          "book_valid","segment"]
+          "book_valid","book_epoch","segment"]
 TARGETS=[f"future_mid_change_{h}s" for h in HORIZONS]
 FIELDS=FEATURES+TARGETS
 
@@ -35,7 +35,7 @@ def depth_levels(book,side,n):
     return sum(float(q) for _,q in vals)
 
 
-def make_row(book,bucket,counts,file_name,ticker,last_quote_ms):
+def make_row(book,bucket,counts,file_name,ticker,last_quote_ms,epoch):
     top=book.top()
     if not top:
         return None
@@ -61,7 +61,7 @@ def make_row(book,bucket,counts,file_name,ticker,last_quote_ms):
             "yes_taker_volume":counts["yes_taker_volume"],
             "no_taker_volume":counts["no_taker_volume"],
             "unknown_taker_volume":counts["unknown_taker_volume"],
-            "book_valid":1}
+            "book_valid":1,"book_epoch":epoch}
 
 
 def extract_file(path):
@@ -73,6 +73,7 @@ def extract_file(path):
     bucket=None
     counts=Counter()
     last_quote_ms=None
+    epoch=0
     source=Path(path).name
     with Path(path).open(encoding="utf-8") as handle:
         for raw in handle:
@@ -122,7 +123,7 @@ def extract_file(path):
                 continue
             if bucket is not None and current>bucket:
                 if book.valid and last_quote_ms is not None:
-                    row=make_row(book,bucket,counts,source,first_ticker,last_quote_ms)
+                    row=make_row(book,bucket,counts,source,first_ticker,last_quote_ms,epoch)
                     if row is not None:rows.append(row)
                 # DO NOT fill no-event seconds with stale quotes.
                 counts=Counter()
@@ -135,6 +136,7 @@ def extract_file(path):
                     if book.seq is None or event.get("sid") is None:
                         raise ValueError("snapshot missing seq/sid")
                     audit["valid_snapshots"]+=1
+                    epoch+=1
                     last_quote_ms=receipt
                 except (ValueError,TypeError,KeyError):
                     book.valid=False
@@ -171,7 +173,7 @@ def extract_file(path):
                     counts["unknown_taker_volume"]+=volume
 
     if bucket is not None and book.valid and last_quote_ms is not None:
-        row=make_row(book,bucket,counts,source,first_ticker,last_quote_ms)
+        row=make_row(book,bucket,counts,source,first_ticker,last_quote_ms,epoch)
         if row is not None:rows.append(row)
 
     audit["valid_seconds"]=len(rows)
@@ -187,7 +189,7 @@ def add_targets(rows):
     d=pd.DataFrame(rows)
     d=d.sort_values("second_ts").drop_duplicates("second_ts").reset_index(drop=True)
     # Each continuous second gets the same segment; missing/invalid seconds split.
-    d["segment"]=(d.second_ts.diff().fillna(1)!=1).cumsum().astype(int)
+    d["segment"]=((d.second_ts.diff().fillna(1)!=1) |\n                  (d.book_epoch!=d.book_epoch.shift(1))).cumsum().astype(int)
     for h in HORIZONS:
         future=d.mid.shift(-h)
         future_second=d.second_ts.shift(-h)
