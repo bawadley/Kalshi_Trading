@@ -60,6 +60,8 @@ class V74Tests(unittest.TestCase):
                 "floor_strike":[100.]
             }).to_csv(m,index=False)
             inp=rows()[["ticker","second_ts"]].copy()
+            inp=pd.concat([inp,pd.DataFrame([{"ticker":"KXBTC15M-TEST",
+                                                  "second_ts":150}])],ignore_index=True)
             joined=join_external(inp,s,m,spot_lag=30,max_spot_age=200)
             # second=100 => decision at 101, with 30-second safety delay,
             # so candle available at 60 is permitted, at 120 is not.
