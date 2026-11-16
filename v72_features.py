@@ -189,7 +189,8 @@ def add_targets(rows):
     d=pd.DataFrame(rows)
     d=d.sort_values("second_ts").drop_duplicates("second_ts").reset_index(drop=True)
     # Each continuous second gets the same segment; missing/invalid seconds split.
-    d["segment"]=((d.second_ts.diff().fillna(1)!=1) |\n                  (d.book_epoch!=d.book_epoch.shift(1))).cumsum().astype(int)
+    d["segment"]=((d.second_ts.diff().fillna(1)!=1) |
+                  (d.book_epoch!=d.book_epoch.shift(1))).cumsum().astype(int)
     for h in HORIZONS:
         future=d.mid.shift(-h)
         future_second=d.second_ts.shift(-h)
