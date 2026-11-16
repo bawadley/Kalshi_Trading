@@ -48,7 +48,7 @@ class V72Tests(unittest.TestCase):
             first=rows[0]
             self.assertAlmostEqual(first["yes_bid"],.4)
             self.assertAlmostEqual(first["yes_ask"],.5)
-            self.assertAlmostEqual(first["imbalance5"],-1/3)
+            self.assertAlmostEqual(first["imbalance5"],(12-20)/(12+20))  # 10 YES + 2 delta; 20 NO
             self.assertEqual(first["trade_count"],1)
             self.assertAlmostEqual(first["yes_taker_volume"],3.0)
             labeled=add_targets(rows)
