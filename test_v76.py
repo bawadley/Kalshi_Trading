@@ -63,7 +63,7 @@ class V76Tests(unittest.TestCase):
         d=sample()
         book=index_book(d)
         signal=next(d.itertuples(index=False))
-        result=simulate(book,signal,"NO","maker_through",2,1,5,1,
+        result=simulate(book,signal,"NO","maker_through",2,1,2,1,
                         0,1,0,1200)
         self.assertEqual(result["status"],"MAKER_NOT_FILLED_PROXY")
         self.assertEqual(result["net_proxy"],0)
