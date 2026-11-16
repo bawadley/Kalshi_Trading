@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from v74_orderflow import add_dynamics, join_external, folds, SETS
+from v74_orderflow import add_dynamics, join_external, folds, SETS, enabled_feature_sets
 
 
 def rows():
@@ -82,6 +82,16 @@ class V74Tests(unittest.TestCase):
             self.assertTrue(set(tr).isdisjoint(va))
             self.assertTrue(set(tr).isdisjoint(te))
             self.assertTrue(set(va).isdisjoint(te))
+
+    def test_all_missing_btc_fields_are_skipped(self):
+        frame=add_dynamics(rows())
+        for col in ("spot_ret1","spot_ret3","strike_distance_pct",
+                    "seconds_to_close","spot_age_seconds"):
+            frame[col]=np.nan
+        selected=enabled_feature_sets(frame.iloc[:14],frame.iloc[14:18],frame.iloc[18:])
+        self.assertIn("price_only",selected)
+        self.assertIn("price_flow_dynamics",selected)
+        self.assertNotIn("price_flow_dynamics_btc",selected)
 
     def test_ablation_distinct(self):
         self.assertEqual(SETS["price_only"],["mid","spread"])

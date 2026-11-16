@@ -128,6 +128,28 @@ def join_external(d,spot_path,meta_path,spot_lag=60,max_spot_age=180):
     return d.replace([np.inf,-np.inf],np.nan)
 
 
+def enabled_feature_sets(train, validation, test):
+    """Never train a feature set with absent external or rolling inputs.
+
+    For the BTC experiment require complete verified spot and strike coverage
+    in all chronological partitions; otherwise report it as unavailable.
+    """
+    available={}
+    for name,cols in SETS.items():
+        if any(col not in train for col in cols):
+            continue
+        if name=="price_flow_dynamics_btc":
+            if any(not part[BTC].notna().all().all()
+                   for part in (train,validation,test)):
+                continue
+        # Drop columns missing for every training row. An all-NaN feature
+        # cannot inform a model and causes estimator-specific failures.
+        filtered=[c for c in cols if train[c].notna().any()]
+        if filtered and (name!="price_flow_dynamics_btc" or len(filtered)==len(cols)):
+            available[name]=filtered
+    return available
+
+
 def models():
     return {
         "ridge":make_pipeline(SimpleImputer(strategy="median"),
@@ -164,6 +186,12 @@ def run(input_path,spot_path,meta_path,out,horizons,train_n,val_n,test_n,
     print(f"Enriched rows={len(d):,}; markets={d.ticker.nunique()}")
     print(f"BTC price available={d.spot_close.notna().mean():.1%}, "
           f"strike available={d.strike_distance_pct.notna().mean():.1%}")
+    if not d.spot_close.notna().any():
+        print("DATA GAP: Coinbase candles do not cover the recorded V7.2 seconds. "
+              "Run v74_backfill.py to fetch spot for those recording dates.")
+    if not d.floor_strike.notna().any():
+        print("DATA GAP: V5 metadata has no matching recorded market tickers. "
+              "Run v74_backfill.py to collect metadata for these markets.")
     for h in horizons:
         target=f"future_mid_change_{h}s"
         if target not in d: raise ValueError(f"Missing {target}")
@@ -180,13 +208,13 @@ def run(input_path,spot_path,meta_path,out,horizons,train_n,val_n,test_n,
             if len(va)<5 or len(te)<5:continue
             truth=te[target].to_numpy()
             baseline=float(np.mean(abs(truth)))
-            for label,cols in SETS.items():
-                # Comparison on paired test timestamps; optional BTC features
-                # are allowed missing and imputed from TRAIN only. Model never
-                # receives future labels or future market rows as features.
-                available=[c for c in cols if c in v.columns]
-                if len(available)!=len(cols):
-                    raise ValueError(f"Missing feature columns: {set(cols)-set(available)}")
+            active_sets=enabled_feature_sets(tr,va,te)
+            if "price_flow_dynamics_btc" not in active_sets:
+                print(f"{h}s fold {count}: skipping BTC feature set: "
+                      "missing or stale spot/strike/close-time features.")
+            for label,cols in active_sets.items():
+                # Only training-observed feature columns are eligible. The
+                # held-out market is never used to choose model parameters.
                 best=None
                 for name,model in models().items():
                     model.fit(tr[cols],tr[target])
