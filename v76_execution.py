@@ -250,6 +250,7 @@ def audit_windows(data, book, holds, latency, wait, age_ms, step):
         observed_entry = 0
         observed_taker_exit = 0
         observed_maker_window = 0
+        touch_yes = touch_no = through_yes = through_no = 0
         for _, market in data.groupby("ticker", sort=False):
             for signal in eligible_signals(market, hold, latency, wait,
                                            age_ms, step):
@@ -262,13 +263,26 @@ def audit_windows(data, book, holds, latency, wait, age_ms, step):
                 exit_row = lookup(book, signal, t + latency + hold)
                 if quote_ok(exit_row, age_ms):
                     observed_taker_exit += 1
-                if all(quote_ok(lookup(book, signal, t + latency + k), age_ms)
-                       for k in range(1, wait + 1)):
+                future_quotes = [lookup(book, signal, t + latency + k)
+                                 for k in range(1, wait + 1)]
+                if all(quote_ok(f, age_ms) for f in future_quotes):
                     observed_maker_window += 1
+                    yes_bid = entry.yes_bid
+                    no_bid = 1 - entry.yes_ask
+                    yes_min_ask = min(f.yes_ask for f in future_quotes)
+                    no_min_ask = min(1 - f.yes_bid for f in future_quotes)
+                    touch_yes += int(yes_min_ask <= yes_bid)
+                    through_yes += int(yes_min_ask < yes_bid)
+                    touch_no += int(no_min_ask <= no_bid)
+                    through_no += int(no_min_ask < no_bid)
         audit.append({"hold_s":hold,"signal_windows":eligible,
                       "entry_observed":observed_entry,
                       "taker_exit_observed":observed_taker_exit,
-                      "complete_maker_wait_windows":observed_maker_window})
+                      "complete_maker_wait_windows":observed_maker_window,
+                      "maker_yes_touch_proxy":touch_yes,
+                      "maker_yes_through_proxy":through_yes,
+                      "maker_no_touch_proxy":touch_no,
+                      "maker_no_through_proxy":through_no})
     return pd.DataFrame(audit)
 
 
