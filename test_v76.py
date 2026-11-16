@@ -92,6 +92,16 @@ class V76Tests(unittest.TestCase):
         trade=simulate(book,signal,"YES","taker",2,1,5,1,0,1,0,1200)
         self.assertEqual(trade["status"],"EXIT_UNOBSERVED_LOSS_BOUND")
 
+    def test_new_hole_after_row_removal_blocks_future_match(self):
+        d=sample()
+        # A data-cleaning step removes an internal second, despite the
+        # original V7.2 segment number remaining unchanged.
+        d=prepared(d[d.second_ts.ne(10002)])
+        signal=next(d.itertuples(index=False))
+        got=simulate(index_book(d),signal,"YES","taker",2,1,5,1,
+                     0,1,0,1200)
+        self.assertEqual(got["status"],"EXIT_UNOBSERVED_LOSS_BOUND")
+
     def test_validation_keeps_no_trade_on_losing_fixture(self):
         d=sample(markets=2)
         # Keep a constant spread/price to make YES and NO taker strategies lose;

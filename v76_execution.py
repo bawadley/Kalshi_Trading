@@ -40,8 +40,15 @@ def prepared(data):
     if dupe.any():
         print(f"Excluding {int(dupe.sum())} overlapping market-second rows")
         d = d.loc[~dupe].copy()
-    d = d.sort_values(["ticker", "second_ts", "source_file"]).reset_index(drop=True)
-    return d
+    d = d.sort_values(["ticker", "source_file", "book_epoch",
+                       "segment", "second_ts"]).reset_index(drop=True)
+    # A duplicate-removal or source anomaly can introduce a NEW gap within
+    # an existing V7.2 segment. Never bridge that hole to a future quote.
+    keys = ["ticker", "source_file", "book_epoch", "segment"]
+    prior = d.groupby(keys, sort=False).second_ts.shift(1)
+    d["run_id"] = (prior.ne(d.second_ts - 1)).groupby(
+        [d[c] for c in keys]).cumsum().astype(int)
+    return d.sort_values(["ticker", "second_ts", "source_file"]).reset_index(drop=True)
 
 
 def quote_ok(row, age_ms):
@@ -57,14 +64,14 @@ def index_book(data):
     result = {}
     for row in data.itertuples(index=False):
         key = (row.ticker, row.source_file, row.book_epoch,
-               row.segment, int(row.second_ts))
+               row.segment, row.run_id, int(row.second_ts))
         result[key] = row
     return result
 
 
 def lookup(book, signal, when):
     key = (signal.ticker, signal.source_file, signal.book_epoch,
-           signal.segment, int(when))
+           signal.segment, signal.run_id, int(when))
     return book.get(key)
 
 
